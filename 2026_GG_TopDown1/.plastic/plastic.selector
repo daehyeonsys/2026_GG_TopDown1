@@ -1,0 +1,4 @@
+repository "2026_GG_TopDown1/2026_GG_TopDown1@14569796923503@cloud"
+  path "/"
+    br "/main"
+    co "/main"
