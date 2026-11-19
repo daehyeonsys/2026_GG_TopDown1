@@ -1,6 +1,7 @@
 
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.UI;
 using TMPro;
 
 public class DialogueBox : MonoBehaviour
@@ -10,6 +11,10 @@ public class DialogueBox : MonoBehaviour
     public TMP_Text nameText;
     public TMP_Text bodyText;
 
+    [Header("캐릭터별 일러스트 UI")]
+    public Image rowenPortraitImage;
+    public Image kaiPortraitImage;
+
     [Header("선택지 UI")]
     public GameObject choicePanel;
     public TMP_Text choiceText1;
@@ -18,9 +23,15 @@ public class DialogueBox : MonoBehaviour
     [Header("대화 상태")]
     public bool isOpen = false;
     public Talk nearTalk;
-
-    // 문 상호작용 추가
     public Door nearDoor;
+
+    [Header("음악 상자 획득")]
+    public Talk musicBoxRewardTalk;
+    public ItemPickupUI itemPickupUI;
+
+    [Header("메인 퀘스트")]
+    public MainQuestManager questManager;
+    public Talk questStartTalk;
 
     private Talk current;
     private DialogueLine[] lines;
@@ -32,11 +43,13 @@ public class DialogueBox : MonoBehaviour
         isOpen = false;
         choosing = false;
 
+        if (panel != null)
+            panel.SetActive(false);
+
         if (choicePanel != null)
             choicePanel.SetActive(false);
 
-        if (panel != null)
-            panel.SetActive(false);
+        HideAllPortraits();
     }
 
     void Update()
@@ -46,7 +59,7 @@ public class DialogueBox : MonoBehaviour
         if (kb == null)
             return;
 
-        // 선택지가 표시된 상태
+        // 선택지 입력
         if (choosing)
         {
             if (kb.digit1Key.wasPressedThisFrame ||
@@ -63,7 +76,7 @@ public class DialogueBox : MonoBehaviour
             return;
         }
 
-        // E키로 대화 시작, 진행 및 문 사용
+        // E키 대화 및 문 상호작용
         if (kb.eKey.wasPressedThisFrame)
         {
             if (isOpen)
@@ -81,7 +94,7 @@ public class DialogueBox : MonoBehaviour
         }
     }
 
-    // NPC와 대화 시작
+    // NPC 대화 시작
     public void Open(Talk talk)
     {
         if (talk == null ||
@@ -136,22 +149,56 @@ public class DialogueBox : MonoBehaviour
             index >= lines.Length)
             return;
 
+        DialogueLine line = lines[index];
+
         if (nameText != null)
-            nameText.text = lines[index].speaker;
+            nameText.text = line.speaker;
 
         if (bodyText != null)
-            bodyText.text = lines[index].text;
+            bodyText.text = line.text;
 
-        // 마지막 대사인지 확인
+        UpdatePortrait(line.speaker);
+
         bool isLast = index == lines.Length - 1;
 
-        // 마지막 대사에 선택지가 있다면 표시
         if (isLast &&
             current != null &&
             !string.IsNullOrWhiteSpace(current.choice1))
         {
             ShowChoices();
         }
+    }
+
+    // 캐릭터 일러스트 변경
+    void UpdatePortrait(string speaker)
+    {
+        HideAllPortraits();
+
+        if (string.IsNullOrWhiteSpace(speaker))
+            return;
+
+        string speakerName = speaker.Trim();
+
+        if (speakerName == "로웬")
+        {
+            if (rowenPortraitImage != null)
+                rowenPortraitImage.gameObject.SetActive(true);
+        }
+        else if (speakerName == "카이")
+        {
+            if (kaiPortraitImage != null)
+                kaiPortraitImage.gameObject.SetActive(true);
+        }
+    }
+
+    // 일러스트 숨기기
+    void HideAllPortraits()
+    {
+        if (rowenPortraitImage != null)
+            rowenPortraitImage.gameObject.SetActive(false);
+
+        if (kaiPortraitImage != null)
+            kaiPortraitImage.gameObject.SetActive(false);
     }
 
     // 다음 대사
@@ -168,7 +215,44 @@ public class DialogueBox : MonoBehaviour
         }
         else
         {
+            Talk finishedTalk = current;
+
             Close();
+
+            ProcessDialogueRewards(finishedTalk);
+        }
+    }
+
+    // 대화 종료 후 보상 및 퀘스트 처리
+    void ProcessDialogueRewards(Talk finishedTalk)
+    {
+        if (finishedTalk == null)
+            return;
+
+        // 음악 상자 획득
+        if (finishedTalk == musicBoxRewardTalk)
+        {
+            if (itemPickupUI != null)
+            {
+                itemPickupUI.GetMusicBox();
+                Debug.Log("음악 상자 획득!");
+            }
+        }
+
+        // 메인 퀘스트 시작
+        if (finishedTalk == questStartTalk)
+        {
+            if (questManager != null)
+            {
+                questManager.StartQuest();
+                Debug.Log("로웬 대화 완료! 메인 퀘스트 시작!");
+            }
+            else
+            {
+                Debug.LogWarning(
+                    "MainQuestManager가 연결되지 않았습니다."
+                );
+            }
         }
     }
 
@@ -181,14 +265,10 @@ public class DialogueBox : MonoBehaviour
         choosing = true;
 
         if (choiceText1 != null)
-        {
             choiceText1.text = "1. " + current.choice1;
-        }
 
         if (choiceText2 != null)
-        {
             choiceText2.text = "2. " + current.choice2;
-        }
 
         if (choicePanel != null)
         {
@@ -198,7 +278,7 @@ public class DialogueBox : MonoBehaviour
         else
         {
             Debug.LogError(
-                "DialogueBox의 Choice Panel이 연결되지 않았습니다."
+                "Choice Panel이 연결되지 않았습니다."
             );
         }
     }
@@ -213,6 +293,7 @@ public class DialogueBox : MonoBehaviour
 
         Close();
 
+        // 선택지 이벤트 실행
         if (number == 1)
         {
             selectedTalk.onChoice1?.Invoke();
@@ -222,6 +303,13 @@ public class DialogueBox : MonoBehaviour
         {
             selectedTalk.onChoice2?.Invoke();
             Debug.Log("2번 선택지 선택");
+        }
+
+        // 선택지 이벤트에서 새 대화를 열었다면
+        // 이전 대화의 보상은 실행하지 않음
+        if (!isOpen)
+        {
+            ProcessDialogueRewards(selectedTalk);
         }
     }
 
@@ -234,6 +322,8 @@ public class DialogueBox : MonoBehaviour
         current = null;
         lines = null;
         index = 0;
+
+        HideAllPortraits();
 
         if (choicePanel != null)
             choicePanel.SetActive(false);

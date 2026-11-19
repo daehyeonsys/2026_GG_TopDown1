@@ -6,15 +6,21 @@ using UnityEngine.InputSystem;
 [RequireComponent(typeof(SpriteRenderer))]
 public class TopDownPlayerFixed : MonoBehaviour
 {
+    [Header("이동 설정")]
     public float moveSpeed = 4f;
     public float frameTime = 0.15f;
 
+    [Header("기본 캐릭터 스프라이트")]
     public Sprite[] downSprites;
     public Sprite[] upSprites;
     public Sprite[] leftSprites;
     public Sprite[] rightSprites;
 
+    [Header("대화 시스템")]
     public DialogueBox dialogueBox;
+
+    [Header("무기 시스템")]
+    public WeaponSystem weaponSystem;
 
     private Vector2 moveInput;
     private Vector2 facingDir = Vector2.down;
@@ -26,15 +32,23 @@ public class TopDownPlayerFixed : MonoBehaviour
     private int frameIndex = 0;
     private float frameTimer = 0f;
 
+    private int previousWeapon = -1;
+    private int previousDirection = -1;
+
     void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
         sr = GetComponent<SpriteRenderer>();
 
+        if (weaponSystem == null)
+        {
+            weaponSystem = GetComponent<WeaponSystem>();
+        }
+
         currentSprites = downSprites;
     }
 
-    void OnMove(InputValue value)
+    public void OnMove(InputValue value)
     {
         moveInput = value.Get<Vector2>();
 
@@ -53,16 +67,26 @@ public class TopDownPlayerFixed : MonoBehaviour
             movement = Vector2.zero;
         }
 
-        if (Mathf.Abs(facingDir.x) > Mathf.Abs(facingDir.y))
+        int direction = GetDirection();
+
+        int currentWeapon = 0;
+
+        if (weaponSystem != null)
         {
-            currentSprites = facingDir.x < 0
-                ? leftSprites : rightSprites;
+            currentWeapon = weaponSystem.equippedWeapon;
         }
-        else
+
+        if (currentWeapon != previousWeapon ||
+            direction != previousDirection)
         {
-            currentSprites = facingDir.y > 0
-                ? upSprites : downSprites;
+            frameIndex = 0;
+            frameTimer = 0f;
+
+            previousWeapon = currentWeapon;
+            previousDirection = direction;
         }
+
+        currentSprites = GetCurrentSprites(direction);
 
         if (currentSprites == null ||
             currentSprites.Length == 0)
@@ -91,7 +115,15 @@ public class TopDownPlayerFixed : MonoBehaviour
             frameTimer = 0f;
         }
 
-        sr.sprite = currentSprites[frameIndex];
+        if (frameIndex >= currentSprites.Length)
+        {
+            frameIndex = 0;
+        }
+
+        if (currentSprites[frameIndex] != null)
+        {
+            sr.sprite = currentSprites[frameIndex];
+        }
     }
 
     void FixedUpdate()
@@ -104,5 +136,51 @@ public class TopDownPlayerFixed : MonoBehaviour
         }
 
         rb.linearVelocity = movement * moveSpeed;
+    }
+
+    int GetDirection()
+    {
+        if (Mathf.Abs(facingDir.x) > Mathf.Abs(facingDir.y))
+        {
+            return facingDir.x < 0 ? 2 : 3;
+        }
+
+        return facingDir.y > 0 ? 1 : 0;
+    }
+
+    Sprite[] GetCurrentSprites(int direction)
+    {
+        // 무기 장착 중이면 무기 스프라이트 사용
+        if (weaponSystem != null &&
+            weaponSystem.equippedWeapon != 0)
+        {
+            Sprite[] weaponSprites =
+                weaponSystem.GetSprites(direction);
+
+            if (weaponSprites != null &&
+                weaponSprites.Length > 0 &&
+                weaponSprites[0] != null)
+            {
+                return weaponSprites;
+            }
+        }
+
+        // 무기를 장착하지 않았다면 기본 스프라이트
+        switch (direction)
+        {
+            case 0:
+                return downSprites;
+
+            case 1:
+                return upSprites;
+
+            case 2:
+                return leftSprites;
+
+            case 3:
+                return rightSprites;
+        }
+
+        return downSprites;
     }
 }

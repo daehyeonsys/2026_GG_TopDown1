@@ -1,77 +1,154 @@
 
 using UnityEngine;
 using UnityEngine.InputSystem;
+using TMPro;
 
 public class Door : MonoBehaviour
 {
-    [Header("문 이동 설정")]
+    [Header("플레이어")]
+    public Transform player;
+
+    [Header("이동할 위치")]
     public Transform target;
-    public GameObject prompt;
 
-    [Header("대화창 설정")]
+    [Header("무기 시스템")]
+    public WeaponSystem weaponSystem;
+
+    [Header("대화 시스템")]
     public DialogueBox dialogueBox;
-    public Talk lockedTalk;
 
-    [Header("필요한 열쇠 개수")]
-    public int needKeys = 0;
+    [Header("문 안내 UI")]
+    public GameObject prompt;
+    public TMP_Text promptText;
 
-    private Transform player;
+    [Header("문 설정")]
+    public bool requireWeapons = true;
 
-    void OnTriggerEnter2D(Collider2D other)
+    private bool playerNearby = false;
+    private bool isUnlocked = false;
+
+    void Start()
     {
-        if (other.CompareTag("Player"))
+        if (prompt != null && prompt != gameObject)
         {
-            player = other.transform;
+            prompt.SetActive(false);
+        }
 
-            if (prompt != null)
-                prompt.SetActive(true);
+        UpdateDoorState();
+    }
 
-            if (dialogueBox != null)
-                dialogueBox.nearDoor = this;
+    void Update()
+    {
+        UpdateDoorState();
+
+        if (!playerNearby)
+            return;
+
+        if (dialogueBox != null && dialogueBox.isOpen)
+            return;
+
+        Keyboard kb = Keyboard.current;
+
+        if (kb == null)
+            return;
+
+        if (kb.eKey.wasPressedThisFrame)
+        {
+            Use();
         }
     }
 
-    void OnTriggerExit2D(Collider2D other)
+    void UpdateDoorState()
     {
-        if (other.CompareTag("Player"))
+        if (!requireWeapons)
         {
-            player = null;
+            isUnlocked = true;
+        }
+        else
+        {
+            isUnlocked =
+                weaponSystem != null &&
+                weaponSystem.HasAllWeapons();
+        }
 
-            if (prompt != null)
-                prompt.SetActive(false);
-
-            if (dialogueBox != null &&
-                dialogueBox.nearDoor == this)
+        if (playerNearby && promptText != null)
+        {
+            if (isUnlocked)
             {
-                dialogueBox.nearDoor = null;
+                promptText.text = "E : 문 열기";
+            }
+            else
+            {
+                promptText.text =
+                    "문이 잠겨 있습니다.\n무기를 챙겨야 합니다.";
             }
         }
     }
 
     public void Use()
     {
-        if (player == null || target == null)
-            return;
+        UpdateDoorState();
 
-        Inventory inventory =
-            player.GetComponent<Inventory>();
-
-        if (inventory == null)
+        // 무기를 획득하지 않았다면 이동 불가
+        // 기존 열쇠 대화창은 표시하지 않음
+        if (!isUnlocked)
         {
-            Debug.LogWarning(
-                "Player에 Inventory가 없습니다!"
+            Debug.Log("무기를 획득해야 문을 열 수 있습니다.");
+            return;
+        }
+
+        if (player == null || target == null)
+        {
+            Debug.LogError(
+                "Door: Player 또는 Target이 연결되지 않았습니다."
             );
             return;
         }
 
-        if (inventory.keyCount >= needKeys)
+        Rigidbody2D rb = player.GetComponent<Rigidbody2D>();
+
+        if (rb != null)
         {
-            player.position = target.position;
+            rb.linearVelocity = Vector2.zero;
         }
-        else
+
+        player.position = target.position;
+
+        playerNearby = false;
+
+        if (prompt != null && prompt != gameObject)
         {
-            if (lockedTalk != null)
-                lockedTalk.Say();
+            prompt.SetActive(false);
+        }
+
+        Debug.Log("문을 통과했습니다.");
+    }
+
+    void OnTriggerEnter2D(Collider2D other)
+    {
+        if (!other.CompareTag("Player"))
+            return;
+
+        playerNearby = true;
+
+        UpdateDoorState();
+
+        if (prompt != null && prompt != gameObject)
+        {
+            prompt.SetActive(true);
+        }
+    }
+
+    void OnTriggerExit2D(Collider2D other)
+    {
+        if (!other.CompareTag("Player"))
+            return;
+
+        playerNearby = false;
+
+        if (prompt != null && prompt != gameObject)
+        {
+            prompt.SetActive(false);
         }
     }
 }
